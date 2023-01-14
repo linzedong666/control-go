@@ -36,9 +36,9 @@ type goSync struct {
 	limit chan struct{}
 	wait  bool //是否等待协程组结束后结束阻塞
 
-	syncErrChan atomic.Value
+	syncErrChan chan error
 	errOnce     sync.Once
-	isFinish    atomic.Bool
+	isFinish    atomic.Bool //因错误导致结束
 
 	closeOnce sync.Once
 }
@@ -48,7 +48,7 @@ func New(config Config) *goSync {
 	g.gStart.Store(0)
 	g.gFinish.Store(0)
 	g.wchan = make(chan struct{}, 0)
-	g.syncErrChan.Store(make(chan error, 1))
+	g.syncErrChan = make(chan error, 1)
 	if config.Limit > 0 {
 		g.limit = make(chan struct{}, config.Limit)
 	}
@@ -72,6 +72,7 @@ func (g *goSync) Run() error {
 		for i := range g.funcs {
 			//要是某个协程因错误或者某些原因导致标识结束，则不再开启任务
 			if g.isFinish.Load() {
+				close(g.wchan)
 				return
 			}
 			if g.limit != nil && !g.isFinish.Load() {
@@ -90,6 +91,7 @@ func (g *goSync) Run() error {
 						close(g.wchan)
 					}
 					if g.limit != nil {
+						//即使启动前因为并发导致没有执行g.limit <- struct{}{}，但只要最终调用了close,该协程最终也能关闭
 						<-g.limit
 					}
 				}()
@@ -102,28 +104,37 @@ func (g *goSync) Run() error {
 
 func (g *goSync) SentErr(err error) {
 	if err == nil {
-		panic("error cannot be nil")
+		panic("goroutines have been not activated,can't called this method")
 	}
+	//后续可额外处理同步等待的错误，新起数据结构接收或者输送到goSync.errs中
 	if g.wait {
 		panic("goSync is in a synchronous wait state")
 	}
 
 	g.errOnce.Do(func() {
+		g.syncErrChan <- err
 		g.isFinish.Store(true)
-		g.syncErrChan.Load().(chan error) <- err
 	})
 }
 
 // Err 协程组结束之前会阻塞,不可重复调用
 func (g *goSync) Err() error {
+	if !g.running.Load() {
+		panic("")
+	}
 	select {
-	case err := <-g.syncErrChan.Load().(chan error):
+	case err := <-g.syncErrChan:
 		g.close()
 		return err
 	case <-g.wchan:
+		// 二重检测是否没有错误
+		if g.isFinish.Load() {
+			g.close()
+			return <-g.syncErrChan
+		}
 		g.close()
 	}
-
+	fmt.Println("出错了", g.isFinish.Load())
 	if len(g.errs) == 1 {
 		return g.errs[0]
 	}
@@ -164,8 +175,7 @@ func identifyPanic() string {
 }
 func (g *goSync) close() {
 	g.closeOnce.Do(func() {
-		g.isFinish.Store(true)
-		close(g.syncErrChan.Load().(chan error))
+		close(g.syncErrChan)
 		if g.limit != nil {
 			close(g.limit)
 		}
