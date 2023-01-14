@@ -176,9 +176,9 @@ func identifyPanic() string {
 func (g *goSync) close() {
 	g.closeOnce.Do(func() {
 		close(g.syncErrChan)
-		if g.limit != nil {
-			close(g.limit)
-		}
+		//if g.limit != nil {
+		//	close(g.limit)
+		//}
 
 	})
 }

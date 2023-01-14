@@ -10,15 +10,15 @@ import (
 
 func TestGos(t *testing.T) {
 	defer goleak.VerifyNone(t)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		go func() {
 			fmt.Println(i, "------", gos())
 		}()
 	}
-	time.Sleep(time.Second * 2)
+	//time.Sleep(time.Second * 2)
 }
 func gos() error {
-	s := New(Config{})
+	s := New(Config{Limit: 1})
 	s.Go(func() {
 		s.SentErr(errors.New("123"))
 	})
