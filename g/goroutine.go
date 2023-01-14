@@ -15,7 +15,7 @@ func init() {
 	close(closedchan)
 }
 
-type GoConfig struct {
+type Config struct {
 	Limit   int  //限制同时存在的协程数，0则不受限制
 	GoCount int  //要控制的协程数量
 	Wait    bool //是否等待所有goroutine执行完毕再关闭,遇到错误可立即结束阻塞,默认不等
@@ -38,7 +38,7 @@ type goSync struct {
 	isFinish    atomic.Bool
 }
 
-func New(config GoConfig) *goSync {
+func New(config Config) *goSync {
 	g := NewGoS(config.GoCount)
 	if config.Limit > 0 {
 		g.limit = make(chan struct{}, config.Limit)
