@@ -72,7 +72,6 @@ func (g *goSync) Run() error {
 		for i := range g.funcs {
 			//要是某个协程因错误或者某些原因导致标识结束，则不再开启任务
 			if g.isFinish.Load() {
-				close(g.wchan)
 				return
 			}
 			if g.limit != nil && !g.isFinish.Load() {
@@ -124,17 +123,13 @@ func (g *goSync) Err() error {
 	}
 	select {
 	case err := <-g.syncErrChan:
-		g.close()
 		return err
 	case <-g.wchan:
 		// 二重检测是否没有错误
 		if g.isFinish.Load() {
-			g.close()
 			return <-g.syncErrChan
 		}
-		g.close()
 	}
-	fmt.Println("出错了", g.isFinish.Load())
 	if len(g.errs) == 1 {
 		return g.errs[0]
 	}
@@ -172,13 +167,4 @@ func identifyPanic() string {
 	}
 
 	return fmt.Sprintf("pc:%x", pc)
-}
-func (g *goSync) close() {
-	g.closeOnce.Do(func() {
-		close(g.syncErrChan)
-		//if g.limit != nil {
-		//	close(g.limit)
-		//}
-
-	})
 }
