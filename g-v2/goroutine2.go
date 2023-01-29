@@ -107,6 +107,11 @@ func (g *goSync) SentErr(err error) {
 	}
 	//后续可额外处理同步等待的错误，新起数据结构接收或者输送到goSync.errs中
 	if g.wait {
+		g.errOnce.Do(func() {
+			g.eMutex.Lock()
+			g.errs = append(g.errs, fmt.Errorf("goroutine err:%s", err))
+			g.eMutex.Unlock()
+		})
 		return
 	}
 

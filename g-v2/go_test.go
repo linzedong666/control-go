@@ -12,12 +12,14 @@ import (
 
 func TestGos(t *testing.T) {
 	defer goleak.VerifyNone(t)
-	for i := 0; i < 1000000; i++ {
+	start := time.Now()
+	for i := 0; i < 1; i++ {
 		go func(i int) {
-			gos()
-			//fmt.Println(i, "------", gos())
+			//gos()
+			fmt.Println(i, "------", gos())
 		}(i)
 	}
+	fmt.Println(time.Now().Sub(start).Seconds())
 	fmt.Println("总数", runtime.NumGoroutine())
 	for runtime.NumGoroutine() > 2 {
 		fmt.Println(runtime.NumGoroutine())
@@ -26,19 +28,20 @@ func TestGos(t *testing.T) {
 	fmt.Println("结束", runtime.NumGoroutine())
 }
 func gos() error {
-	s := New(Config{})
+	s := New(Config{Wait: true, Limit: 3})
 	s.Go(func() {
-		time.Sleep(time.Second * 5)
+		s.SentErr(errors.New("123"))
 		//panic("睡死" + strconv.FormatBool(s.isCause.Load()))
 	})
 	s.Go(func() {
+		panic("123")
 		s.SentErr(errors.New("123"))
 	})
 	s.Go(func() {
-		s.SentErr(errors.New("123"))
+		panic("123")
 	})
 	s.Go(func() {
-		s.SentErr(errors.New("123"))
+		panic("123")
 	})
 	s.Run()
 	return s.Err()
