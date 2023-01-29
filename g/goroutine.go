@@ -33,7 +33,7 @@ type goSync struct {
 	limit chan struct{}
 	wait  bool //是否等待协程组结束后结束阻塞
 
-	errChan     atomic.Value
+	errChan     chan error
 	errChanOnce sync.Once
 	isFinish    atomic.Bool
 }
@@ -56,13 +56,13 @@ func NewGoS(goCount int) *goSync {
 	g.gStart.Store(0)
 	g.gFinish.Store(0)
 	g.wchan = make(chan struct{}, 0)
-	g.errChan.Store(make(chan error, 1))
+	g.errChan = make(chan error, 1)
 	return g
 }
 
 func (g *goSync) Go(f func()) error {
 	if g.gStart.Add(1) > g.gNum.Load() {
-		return errors.New("The number of goroutines created exceeds the limit.")
+		return errors.New("the number of goroutines created exceeds the limit")
 	}
 	if g.isFinish.Load() {
 		return errors.New("goroutine group control has ended early due to unknown error")
@@ -101,18 +101,20 @@ func (g *goSync) SentErr(err error) {
 	}
 	g.errChanOnce.Do(func() {
 		g.isFinish.Store(true)
-		g.errChan.Load().(chan error) <- err
+		g.errChan <- err
 	})
 }
 
 // Err 协程组结束之前会阻塞,不可重复调用
 func (g *goSync) Err() error {
 	select {
-	case <-g.wchan:
-		g.close()
-	case err := <-g.errChan.Load().(chan error):
-		g.close()
+	case err := <-g.errChan:
 		return err
+	case <-g.wchan:
+		//二重检测
+		if g.isFinish.Load() {
+			return <-g.errChan
+		}
 	}
 
 	if len(g.errs) == 1 {
@@ -152,12 +154,4 @@ func identifyPanic() string {
 	}
 
 	return fmt.Sprintf("pc:%x", pc)
-}
-func (g *goSync) close() {
-	g.isFinish.Store(true)
-	close(g.errChan.Load().(chan error))
-	if g.limit != nil {
-		close(g.limit)
-	}
-
 }

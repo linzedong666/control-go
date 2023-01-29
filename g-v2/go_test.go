@@ -12,22 +12,33 @@ import (
 
 func TestGos(t *testing.T) {
 	defer goleak.VerifyNone(t)
-	for i := 0; i < 100; i++ {
-		go func() {
-			fmt.Println(i, "------", gos())
-		}()
+	for i := 0; i < 1000000; i++ {
+		go func(i int) {
+			gos()
+			//fmt.Println(i, "------", gos())
+		}(i)
 	}
-	//time.Sleep(time.Second * 2)
+	fmt.Println("总数", runtime.NumGoroutine())
+	for runtime.NumGoroutine() > 2 {
+		fmt.Println(runtime.NumGoroutine())
+		time.Sleep(time.Second)
+	}
+	fmt.Println("结束", runtime.NumGoroutine())
 }
 func gos() error {
-	s := New(Config{Limit: 1})
+	s := New(Config{})
+	s.Go(func() {
+		time.Sleep(time.Second * 5)
+		//panic("睡死" + strconv.FormatBool(s.isCause.Load()))
+	})
 	s.Go(func() {
 		s.SentErr(errors.New("123"))
 	})
-
 	s.Go(func() {
-		time.Sleep(time.Second)
-		//panic("睡死" + strconv.FormatBool(s.isFinish.Load()))
+		s.SentErr(errors.New("123"))
+	})
+	s.Go(func() {
+		s.SentErr(errors.New("123"))
 	})
 	s.Run()
 	return s.Err()

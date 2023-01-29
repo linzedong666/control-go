@@ -38,7 +38,7 @@ type goSync struct {
 
 	syncErrChan chan error
 	errOnce     sync.Once
-	isFinish    atomic.Bool //因错误导致结束
+	isCause     atomic.Bool //因错误导致结束
 
 	closeOnce sync.Once
 }
@@ -71,10 +71,10 @@ func (g *goSync) Run() error {
 	go func() {
 		for i := range g.funcs {
 			//要是某个协程因错误或者某些原因导致标识结束，则不再开启任务
-			if g.isFinish.Load() {
+			if g.isCause.Load() {
 				return
 			}
-			if g.limit != nil && !g.isFinish.Load() {
+			if g.limit != nil {
 				g.limit <- struct{}{}
 			}
 			go func(index int) {
@@ -107,17 +107,18 @@ func (g *goSync) SentErr(err error) {
 	}
 	//后续可额外处理同步等待的错误，新起数据结构接收或者输送到goSync.errs中
 	if g.wait {
-		panic("goSync is in a synchronous wait state")
+		return
 	}
 
 	g.errOnce.Do(func() {
 		g.syncErrChan <- err
-		g.isFinish.Store(true)
+		g.isCause.Store(true)
 	})
 }
 
 // Err 协程组结束之前会阻塞,不可重复调用
 func (g *goSync) Err() error {
+	//协程组开启前不可调用
 	if !g.running.Load() {
 		panic("")
 	}
@@ -126,7 +127,7 @@ func (g *goSync) Err() error {
 		return err
 	case <-g.wchan:
 		// 二重检测是否没有错误
-		if g.isFinish.Load() {
+		if g.isCause.Load() {
 			return <-g.syncErrChan
 		}
 	}
