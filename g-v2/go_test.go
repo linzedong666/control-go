@@ -1,6 +1,7 @@
 package g_v2
 
 import (
+	_ "control-go/g"
 	"errors"
 	"fmt"
 	"go.uber.org/goleak"
@@ -74,6 +75,9 @@ func allocBitsForAddr(p uintptr) markBits {
 var ca [10]chan int
 var pa [10]uintptr
 
+func TestLinkName(t *testing.T) {
+
+}
 func TestGC(t *testing.T) {
 	for i := 0; i < len(pa); i++ {
 		c := make(chan int, 10)

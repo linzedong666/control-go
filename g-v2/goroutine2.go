@@ -90,7 +90,6 @@ func (g *goSync) Run() error {
 						close(g.wchan)
 					}
 					if g.limit != nil {
-						//即使启动前因为并发导致没有执行g.limit <- struct{}{}，但只要最终调用了close,该协程最终也能关闭
 						<-g.limit
 					}
 				}()
