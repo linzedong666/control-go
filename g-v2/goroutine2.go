@@ -102,7 +102,7 @@ func (g *goSync) Run() error {
 
 func (g *goSync) SentErr(err error) {
 	if err == nil {
-		panic("goroutines have been not activated,can't called this method")
+		panic("err cannot be nil")
 	}
 	//后续可额外处理同步等待的错误，新起数据结构接收或者输送到goSync.errs中
 	if g.wait {
