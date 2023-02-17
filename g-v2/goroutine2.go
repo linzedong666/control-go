@@ -23,24 +23,22 @@ type Config struct {
 
 type goSync struct {
 	funcs   []func()
-	running atomic.Bool
+	running atomic.Bool //协程控制是否已经在运行
 
 	errs   []error
-	eMutex sync.Mutex
-	wchan  chan struct{}
+	eMutex sync.Mutex    //保证errs并发安全
+	wchan  chan struct{} //在所有goroutine执行结束之前进行正常的阻塞
 
-	gNum    atomic.Int64
-	gStart  atomic.Int64
-	gFinish atomic.Int64
+	gNum    atomic.Int64 //需要开启的协程数量
+	gStart  atomic.Int64 //已经开启的协程数量
+	gFinish atomic.Int64 //已经执行结束的协程
 
-	limit chan struct{}
-	wait  bool //是否等待协程组结束后结束阻塞
+	limit chan struct{} //控制在同一时刻协程的启动数量
+	wait  bool          //是否等待协程组结束后结束阻塞
 
-	syncErrChan chan error
-	errOnce     sync.Once
-	isCause     atomic.Bool //因错误导致结束
-
-	closeOnce sync.Once
+	syncErrChan chan error  //接收用户手动记录的err
+	errOnce     sync.Once   //避免重复接收err
+	isCause     atomic.Bool //协程组是否因err而结束
 }
 
 func New(config Config) *goSync {

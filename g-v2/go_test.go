@@ -101,10 +101,10 @@ func TestGC(t *testing.T) {
 	}
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	fmt.Println(m)
+	//fmt.Println(m)
 	runtime.GC()
 	runtime.ReadMemStats(&m)
-	fmt.Println(m)
+	//fmt.Println(m)
 	for i := 0; i < len(pa); i++ {
 		println(isMarked(allocBitsForAddr(pa[i])))
 	}
