@@ -22,30 +22,31 @@ type Config struct {
 }
 
 type goSync struct {
-	funcs   []func()
-	running atomic.Bool //协程控制是否已经在运行
+	funcs []func()
 
-	errs   []error
-	eMutex sync.Mutex    //保证errs并发安全
-	wchan  chan struct{} //在所有goroutine执行结束之前进行正常的阻塞
+	mu    sync.Mutex //保证以下两个字段并发安全
+	errs  []error
+	wchan chan struct{} //在所有goroutine执行结束之前进行正常的阻塞
 
 	gNum    atomic.Int64 //需要开启的协程数量
 	gStart  atomic.Int64 //已经开启的协程数量
 	gFinish atomic.Int64 //已经执行结束的协程
 
 	limit chan struct{} //控制在同一时刻协程的启动数量
-	wait  bool          //是否等待协程组结束后结束阻塞
 
 	syncErrChan chan error  //接收用户手动记录的err
 	errOnce     sync.Once   //避免重复接收err
 	isCause     atomic.Bool //协程组是否因err而结束
+
+	running atomic.Bool //协程控制是否已经在运行
+	wait    bool        //是否等待协程组结束后结束阻塞
 }
 
 func New(config Config) *goSync {
 	g := &goSync{}
 	g.gStart.Store(0)
 	g.gFinish.Store(0)
-	g.wchan = make(chan struct{}, 0)
+	//g.wchan = make(chan struct{}, 0)
 	g.syncErrChan = make(chan error, 1)
 	if config.Limit > 0 {
 		g.limit = make(chan struct{}, config.Limit)
@@ -80,12 +81,19 @@ func (g *goSync) Run() error {
 				defer func() {
 					if r := recover(); r != nil {
 						err := fmt.Errorf("goroutine panic:%s ,%s", identifyPanic(), fmt.Sprintf("%v", r))
-						g.eMutex.Lock()
+						g.mu.Lock()
 						g.errs = append(g.errs, err)
-						g.eMutex.Unlock()
+						g.mu.Unlock()
 					}
+					//如果当前goroutine为最后一个，结束协程组的阻塞
 					if g.gFinish.Add(1) == g.gNum.Load() {
-						close(g.wchan)
+						g.mu.Lock()
+						if g.wchan != nil {
+							close(g.wchan)
+						} else {
+							g.wchan = closedchan
+						}
+						g.mu.Unlock()
 					}
 					if g.limit != nil {
 						<-g.limit
@@ -102,12 +110,11 @@ func (g *goSync) SentErr(err error) {
 	if err == nil {
 		panic("err cannot be nil")
 	}
-	//后续可额外处理同步等待的错误，新起数据结构接收或者输送到goSync.errs中
 	if g.wait {
 		g.errOnce.Do(func() {
-			g.eMutex.Lock()
+			g.mu.Lock()
 			g.errs = append(g.errs, fmt.Errorf("goroutine err:%s", err))
-			g.eMutex.Unlock()
+			g.mu.Unlock()
 		})
 		return
 	}
@@ -124,6 +131,11 @@ func (g *goSync) Err() error {
 	if !g.running.Load() {
 		panic("")
 	}
+	g.mu.Lock()
+	if g.wchan == nil {
+		g.wchan = make(chan struct{})
+	}
+	g.mu.Unlock()
 	select {
 	case err := <-g.syncErrChan:
 		return err

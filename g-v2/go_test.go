@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"go.uber.org/goleak"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unsafe"
@@ -109,4 +111,24 @@ func TestGC(t *testing.T) {
 		println(isMarked(allocBitsForAddr(pa[i])))
 	}
 	println(c)
+}
+
+func TestSize(t *testing.T) {
+	g := goSync{}
+	c := closedchan
+	var funcs []func()
+	var b atomic.Bool
+	var err []error
+	var i atomic.Int64
+	var ce chan error
+	var once sync.Once
+	fmt.Println("chan:", unsafe.Sizeof(c), unsafe.Alignof(c))
+	fmt.Println("funcs:", unsafe.Sizeof(funcs), unsafe.Alignof(funcs))
+	fmt.Println("bool:", unsafe.Sizeof(b), unsafe.Alignof(b))
+	fmt.Println("err:", unsafe.Sizeof(err), unsafe.Alignof(err))
+	fmt.Println("i:", unsafe.Sizeof(i), unsafe.Alignof(i))
+	fmt.Println("ce:", unsafe.Sizeof(ce), unsafe.Alignof(ce))
+	fmt.Println("once:", unsafe.Sizeof(once), unsafe.Alignof(once))
+	fmt.Println("mutex", unsafe.Sizeof(sync.Mutex{}), unsafe.Alignof(sync.Mutex{}))
+	fmt.Println("goSync", unsafe.Sizeof(g), unsafe.Alignof(g))
 }
