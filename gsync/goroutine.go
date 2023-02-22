@@ -1,4 +1,4 @@
-package g_v2
+package gsync
 
 import (
 	"errors"
@@ -21,7 +21,7 @@ type Config struct {
 	Wait bool //是否等待所有goroutine执行完毕再关闭,遇到错误可立即结束阻塞,默认不等
 }
 
-type goSync struct {
+type gSync struct {
 	funcs []func()
 
 	mu    sync.Mutex //保证以下两个字段并发安全
@@ -42,8 +42,8 @@ type goSync struct {
 	wait    bool        //是否等待协程组结束后结束阻塞
 }
 
-func New(config Config) *goSync {
-	g := &goSync{}
+func New(config Config) *gSync {
+	g := &gSync{}
 	g.gStart.Store(0)
 	g.gFinish.Store(0)
 	//g.wchan = make(chan struct{}, 0)
@@ -56,7 +56,7 @@ func New(config Config) *goSync {
 }
 
 // Go 该方法不支持并发
-func (g *goSync) Go(f func()) error {
+func (g *gSync) Go(f func()) error {
 	if g.running.Load() {
 		return errors.New("goroutines have been activated,can't add any more")
 	}
@@ -64,7 +64,7 @@ func (g *goSync) Go(f func()) error {
 	return nil
 }
 
-func (g *goSync) Run() error {
+func (g *gSync) Run() error {
 	g.running.Store(true)
 	g.gNum.Store(int64(len(g.funcs)))
 	go func() {
@@ -112,7 +112,7 @@ func (g *goSync) Run() error {
 	return nil
 }
 
-func (g *goSync) SentErr(err error) {
+func (g *gSync) SentErr(err error) {
 	if err == nil {
 		panic("err cannot be nil")
 	}
@@ -132,7 +132,7 @@ func (g *goSync) SentErr(err error) {
 }
 
 // Err 协程组结束之前会阻塞,不可重复调用
-func (g *goSync) Err() error {
+func (g *gSync) Err() error {
 	//协程组开启前不可调用
 	if !g.running.Load() {
 		panic("")

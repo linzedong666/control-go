@@ -1,4 +1,4 @@
-package g_v2
+package gsync
 
 import (
 	_ "control-go/g"
@@ -113,8 +113,32 @@ func TestGC(t *testing.T) {
 	println(c)
 }
 
+type goSync2 struct {
+	funcs []func()
+
+	mu    sync.Mutex //保证以下两个字段并发安全
+	errs  []error
+	wchan chan struct{} //在所有goroutine执行结束之前进行正常的阻塞
+
+	gNum    atomic.Int64 //需要开启的协程数量
+	gStart  atomic.Int64 //已经开启的协程数量
+	gFinish atomic.Int64 //已经执行结束的协程
+
+	limit chan struct{} //控制在同一时刻协程的启动数量
+
+	syncErrChan chan error  //接收用户手动记录的err
+	errOnce     sync.Once   //避免重复接收err
+	isCause     atomic.Bool //协程组是否因err而结束
+
+	running atomic.Bool //协程控制是否已经在运行
+	wait    bool        //是否等待协程组结束后结束阻塞
+}
+type A struct {
+	c int16
+}
+
 func TestSize(t *testing.T) {
-	g := goSync{}
+	g := gSync{}
 	c := closedchan
 	var funcs []func()
 	var b atomic.Bool
@@ -130,5 +154,7 @@ func TestSize(t *testing.T) {
 	fmt.Println("ce:", unsafe.Sizeof(ce), unsafe.Alignof(ce))
 	fmt.Println("once:", unsafe.Sizeof(once), unsafe.Alignof(once))
 	fmt.Println("mutex", unsafe.Sizeof(sync.Mutex{}), unsafe.Alignof(sync.Mutex{}))
-	fmt.Println("goSync", unsafe.Sizeof(g), unsafe.Alignof(g))
+	fmt.Println("value", unsafe.Sizeof(atomic.Value{}), unsafe.Alignof(atomic.Value{}))
+	fmt.Println("gSync", unsafe.Sizeof(g), unsafe.Alignof(g))
+	fmt.Println("A", unsafe.Sizeof(A{}), unsafe.Alignof(A{}))
 }
