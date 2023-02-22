@@ -26,7 +26,7 @@ type goSync struct {
 
 	mu    sync.Mutex //保证以下两个字段并发安全
 	errs  []error
-	wchan chan struct{} //在所有goroutine执行结束之前进行正常的阻塞,chan struct {}, 懒惰地创建，由最后一个执行完毕的goroutine关闭
+	wchan atomic.Value //在所有goroutine执行结束之前进行正常的阻塞,chan struct {}, 懒惰地创建，由最后一个执行完毕的goroutine关闭
 
 	gNum    atomic.Int64 //需要开启的协程数量
 	gStart  atomic.Int64 //已经开启的协程数量
@@ -85,18 +85,24 @@ func (g *goSync) Run() error {
 						g.errs = append(g.errs, err)
 						g.mu.Unlock()
 					}
-					//如果当前goroutine为最后一个，结束协程组的阻塞
-					if g.gFinish.Add(1) == g.gNum.Load() {
-						g.mu.Lock()
-						if g.wchan != nil {
-							close(g.wchan)
-						} else {
-							g.wchan = closedchan
-						}
-						g.mu.Unlock()
-					}
+
 					if g.limit != nil {
 						<-g.limit
+					}
+					//如果当前goroutine为最后一个，结束协程组的阻塞
+					if g.gFinish.Add(1) == g.gNum.Load() {
+						if d := g.wchan.Load(); d != nil {
+							close(d.(chan struct{}))
+							return
+						}
+						g.mu.Lock()
+						g.mu.Unlock()
+						if d := g.wchan.Load(); d != nil {
+							close(d.(chan struct{}))
+						} else {
+							g.wchan.Store(closedchan)
+						}
+						g.mu.Unlock()
 					}
 				}()
 				g.funcs[index]()
@@ -132,14 +138,14 @@ func (g *goSync) Err() error {
 		panic("")
 	}
 	g.mu.Lock()
-	if g.wchan == nil {
-		g.wchan = make(chan struct{})
+	if g.wchan.Load() == nil {
+		g.wchan.Store(make(chan struct{}))
 	}
 	g.mu.Unlock()
 	select {
 	case err := <-g.syncErrChan:
 		return err
-	case <-g.wchan:
+	case <-g.wchan.Load().(chan struct{}):
 		// 二重检测是否没有错误
 		if g.isCause.Load() {
 			return <-g.syncErrChan
