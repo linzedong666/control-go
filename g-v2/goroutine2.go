@@ -26,7 +26,7 @@ type goSync struct {
 
 	mu    sync.Mutex //保证以下两个字段并发安全
 	errs  []error
-	wchan chan struct{} //在所有goroutine执行结束之前进行正常的阻塞
+	wchan chan struct{} //在所有goroutine执行结束之前进行正常的阻塞,chan struct {}, 懒惰地创建，由最后一个执行完毕的goroutine关闭
 
 	gNum    atomic.Int64 //需要开启的协程数量
 	gStart  atomic.Int64 //已经开启的协程数量
