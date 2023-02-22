@@ -96,7 +96,6 @@ func (g *gSync) Run() error {
 							return
 						}
 						g.mu.Lock()
-						g.mu.Unlock()
 						if d := g.wchan.Load(); d != nil {
 							close(d.(chan struct{}))
 						} else {
