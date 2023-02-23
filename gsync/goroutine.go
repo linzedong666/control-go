@@ -113,7 +113,7 @@ func (g *gSync) Run() error {
 
 func (g *gSync) SentErr(err error) {
 	if err == nil {
-		panic("err cannot be nil")
+		return
 	}
 	if g.wait {
 		g.errOnce.Do(func() {
