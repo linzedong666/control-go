@@ -1,12 +1,14 @@
 package gsync
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var closedchan = make(chan struct{})
@@ -18,7 +20,8 @@ func init() {
 type Config struct {
 	Limit int //限制同时存在的协程数，0则不受限制
 	//GoCount int  //要控制的协程数量
-	Wait bool //是否等待所有goroutine执行完毕再关闭,遇到错误可立即结束阻塞,默认不等
+	Wait    bool //是否等待所有goroutine执行完毕再关闭,遇到错误可立即结束阻塞,默认不等
+	Timeout time.Duration
 }
 
 type gSync struct {
@@ -40,6 +43,8 @@ type gSync struct {
 
 	running atomic.Bool //协程控制是否已经在运行
 	wait    bool        //是否等待协程组结束后结束阻塞
+
+	timeout <-chan struct{}
 }
 
 func New(config Config) *gSync {
@@ -52,6 +57,10 @@ func New(config Config) *gSync {
 		g.limit = make(chan struct{}, config.Limit)
 	}
 	g.wait = config.Wait
+	if config.Timeout > 0 {
+		timeout, _ := context.WithTimeout(context.Background(), config.Timeout)
+		g.timeout = timeout.Done()
+	}
 	return g
 }
 
@@ -130,7 +139,7 @@ func (g *gSync) SentErr(err error) {
 	})
 }
 
-// Err 协程组结束之前会阻塞,不可重复调用
+// Err 协程组结束之前会阻塞,重复调用可能会陷入永久阻塞
 func (g *gSync) Err() error {
 	//协程组开启前不可调用
 	if !g.running.Load() {
@@ -142,6 +151,7 @@ func (g *gSync) Err() error {
 	}
 	g.mu.Unlock()
 	select {
+	//重复调用该方法可能会陷入阻塞
 	case err := <-g.syncErrChan:
 		return err
 	case <-g.wchan.Load().(chan struct{}):
@@ -149,6 +159,8 @@ func (g *gSync) Err() error {
 		if g.isCause.Load() {
 			return <-g.syncErrChan
 		}
+	case <-g.timeout:
+		return errors.New("execution timeout")
 	}
 	if len(g.errs) == 1 {
 		return g.errs[0]
