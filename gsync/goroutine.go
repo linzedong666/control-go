@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -12,9 +13,15 @@ import (
 )
 
 var closedchan = make(chan struct{})
+var path string
 
 func init() {
 	close(closedchan)
+	dir, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	path = strings.ReplaceAll(dir, `\`, "/")
 }
 
 type Config struct {
@@ -89,7 +96,7 @@ func (g *gSync) Run() error {
 				g.gStart.Add(1)
 				defer func() {
 					if r := recover(); r != nil {
-						err := fmt.Errorf("goroutine panic:%s ,%s", identifyPanic(), fmt.Sprintf("%v", r))
+						err := fmt.Errorf("%s%s ,%s", Red.Add("panic:"), identifyPanic(), Red.Add(fmt.Sprintf("%v", r)))
 						g.mu.Lock()
 						g.errs = append(g.errs, err)
 						g.mu.Unlock()
@@ -183,20 +190,34 @@ func identifyPanic() string {
 
 	_ = runtime.Callers(3, pc[:])
 	frames := runtime.CallersFrames(pc)
+
+	var b strings.Builder
+	var color Color
+	add := func(s string) string {
+		if color == Blue {
+			color = Cyan
+		} else {
+			color = Blue
+		}
+		return color.Add(s)
+	}
 	for frame, more := frames.Next(); more; frame, more = frames.Next() {
 		file = frame.File
 		line = frame.Line
 		name = frame.Function
-		if !strings.HasPrefix(name, "runtime.") {
+		if path == "" && !strings.HasPrefix(name, "runtime.") {
+			_, _ = b.WriteString(add(fmt.Sprintf("(%s:%d)", name, line)))
 			break
+		} else if path != "" && strings.HasPrefix(file, path) {
+			_, _ = b.WriteString(add(fmt.Sprintf("(%s:%d)", name, line)))
+			break
+		} else if path != "" && !strings.HasPrefix(name, "runtime.") {
+			_, _ = b.WriteString(add(fmt.Sprintf("(%s:%d)", name, line)))
 		}
-	}
-	switch {
-	case name != "":
-		return fmt.Sprintf("%v:%v", name, line)
-	case file != "":
-		return fmt.Sprintf("%v:%v", file, line)
-	}
 
+	}
+	if b.Len() > 0 {
+		return b.String()
+	}
 	return fmt.Sprintf("pc:%x", pc)
 }
